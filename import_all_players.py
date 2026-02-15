@@ -47,12 +47,14 @@ for col in df.columns:
     print(f"  {col}: {first_row[col]}")
 
 # Confirm
-print("\n" + "=" * 70)
-response = input("Delete ALL existing players and import these? (y/yes): ")
+if not os.environ.get('RENDER'):
+    response = input("Delete ALL existing players and import these? (y/yes): ")
 
-if response.lower() not in ['y', 'yes']:
-    print("Import cancelled")
-    sys.exit(0)
+    if response.lower() not in ['y', 'yes']:
+        print("Import cancelled")
+        sys.exit(0)
+else:
+    print("Running in Render environment - skipping confirmation prompt.")
 
 # Delete existing
 deleted_count = Player.objects.count()
