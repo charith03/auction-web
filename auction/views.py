@@ -7,7 +7,7 @@ from decimal import Decimal
 import random
 import string
 
-from .models import Player, Team, Auction, Room, Participant, ChatMessage
+from .models import Player, Team, Auction, Room, Participant, ChatMessage, AuctionLog
 from .serializers import PlayerSerializer, TeamSerializer, AuctionSerializer
 from django.views.decorators.csrf import csrf_exempt
 
@@ -40,8 +40,9 @@ def create_room(request):
         return Response({"error": "Host name and team required"}, status=400)
 
     code = "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    is_public = request.data.get("is_public", True)  # Default to Public
 
-    room = Room.objects.create(code=code, host_name=host_name)
+    room = Room.objects.create(code=code, host_name=host_name, is_public=is_public)
 
     # 👇 Register host as participant
     Participant.objects.create(
@@ -79,7 +80,38 @@ def join_room(request):
         is_host=False
     )
 
+
     return Response({"message": "Joined successfully"})
+
+
+@csrf_exempt
+@api_view(["GET"])
+def get_active_rooms(request):
+    """Get list of public active rooms"""
+    # Fix: Correct logical filtering
+    # We want rooms that are NOT COMPLETED
+    today = timezone.now().date()
+    # We want rooms that are NOT COMPLETED and created TODAY
+    rooms = Room.objects.filter(is_public=True, created_at__date=today).exclude(status='COMPLETED').order_by('-created_at')
+    
+    result = []
+    for room in rooms:
+        host_team = "Unknown"
+        # Try to find host's team
+        host = Participant.objects.filter(room=room, is_host=True).first()
+        if host:
+            host_team = host.team
+            
+        result.append({
+            "code": room.code,
+            "host": room.host_name,
+            "host_team": host_team,
+            "player_count": room.participants.count(),
+            "status": "LIVE" if room.is_live else "WAITING",
+            "is_live": room.is_live
+        })
+        
+    return Response(result)
 
 
 # ---------------- AUCTION CONTROL ---------------- #
@@ -147,6 +179,8 @@ def start_auction(request):
     room.last_timer_update = timezone.now()
     room.save()
 
+    AuctionLog.objects.create(room=room, message="🎬 Auction Started!")
+
     return Response({
         "message": "Auction started",
         "room": room.code,
@@ -180,6 +214,9 @@ def pause_auction(request):
         room.last_timer_update = timezone.now()
     
     room.save()
+    
+    log_msg = "⏸️ Auction Paused" if room.is_paused else "▶️ Auction Resumed"
+    AuctionLog.objects.create(room=room, message=log_msg)
     
     return Response({
         "is_paused": room.is_paused,
@@ -281,8 +318,8 @@ def place_bid(request):
     except (ValueError, TypeError):
         return Response({"error": "Invalid bid amount"}, status=400)
     
-    # Convert budget from Crores to Lakhs (1 Cr = 10,000 Lakhs)
-    budget_in_lakhs = participant.budget * 10000
+    # Convert budget from Crores to Lakhs (1 Cr = 100 Lakhs)
+    budget_in_lakhs = participant.budget * 100
     
     print(f"  Team Budget: ₹{participant.budget} Cr (₹{budget_in_lakhs}L)")
     print(f"  Bid Amount: ₹{amount}L")
@@ -300,6 +337,10 @@ def place_bid(request):
     room.save()
     
     print(f"  ✅ Bid accepted! New bid: ₹{amount}L by {team}")
+
+    # Log Bid
+    bid_text = f"₹{str(amount / 100)} Cr" if amount >= 100 else f"₹{amount}L"
+    AuctionLog.objects.create(room=room, message=f"🏏 {team} bid {bid_text}")
     print(f"{'='*60}\n")
 
     return Response({"message": "Bid accepted", "new_timer": room.default_timer_duration})
@@ -413,7 +454,16 @@ def get_room_state(request, code):
                         is_finalized=True,
                         status=room.sold_status
                     )
+
+                    # Log the Result
+                    if room.sold_status == 'UNSOLD':
+                         AuctionLog.objects.create(room=room, message=f"❌ {room.current_player.name} went UNSOLD")
+                    elif room.sold_status == 'SKIPPED':
+                         AuctionLog.objects.create(room=room, message=f"⏭️ {room.current_player.name} SKIPPED")
                 
+                if room.sold_status == 'SOLD':
+                     price_fmt = f"₹{room.sold_price/100} Cr" if room.sold_price >= 100 else f"₹{room.sold_price}L"
+                     AuctionLog.objects.create(room=room, message=f"🏆 {room.current_player.name} SOLD to {room.sold_team} for {price_fmt}!")
                 # Clear sold status and move to next player
                 room.sold_status = None
                 room.sold_at = None
@@ -616,6 +666,8 @@ def skip_player(request):
     room.sold_status = 'SKIPPED'
     room.sold_at = timezone.now()
     room.save()
+
+    AuctionLog.objects.create(room=room, message=f"⏭️ {room.current_player.name} SKIPPED")
     
     return Response({"message": "Player skipped", "status": "SKIPPED"})
 
@@ -793,8 +845,27 @@ def get_summary(request, code):
             "players": players_list
         })
     
-    
     return Response(result)
+    
+    
+# ---------------- LOGS ---------------- #
+
+@csrf_exempt
+@api_view(["GET"])
+def get_auction_logs(request, code):
+    """Get persistence logs for the room"""
+    try:
+        room = Room.objects.get(code=code)
+    except Room.DoesNotExist:
+        return Response({"error": "Invalid room code"}, status=404)
+    
+    # Return last 50 logs? Or all? Let's do all for now.
+    logs = room.logs.all()  # Ordered by timestamp asc in Meta
+    
+    return Response([
+        {"message": log.message, "timestamp": log.timestamp.strftime("%H:%M:%S")}
+        for log in logs
+    ])
 
 
 @csrf_exempt

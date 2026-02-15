@@ -40,6 +40,7 @@ class Room(models.Model):
 
     is_live = models.BooleanField(default=False)
     is_paused = models.BooleanField(default=False)
+    is_public = models.BooleanField(default=True)  # Public vs Private room
     
     # Workflow Status
     STATUS_CHOICES = [
@@ -132,4 +133,16 @@ class ChatMessage(models.Model):
 
     def __str__(self):
         return f"{self.sender}: {self.message[:50]}"
+
+
+class AuctionLog(models.Model):
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="logs")
+    message = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['timestamp']
+
+    def __str__(self):
+        return f"[{self.room.code}] {self.message}"
 

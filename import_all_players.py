@@ -71,6 +71,9 @@ role_col = None
 country_col = None
 price_col = None
 set_col = None
+age_col = None
+hand_col = None
+bowling_col = None
 
 for col in df.columns:
     col_lower = col.lower().strip()
@@ -87,6 +90,12 @@ for col in df.columns:
         price_col = col
     elif 'set' in col_lower and 'no' in col_lower:
         set_col = col
+    elif 'age' in col_lower:
+        age_col = col
+    elif 'hand' in col_lower:
+        hand_col = col
+    elif 'bowling' in col_lower:
+        bowling_col = col
 
 print(f"\nDetected columns:")
 print(f"  First Name: {first_name_col}")
@@ -94,7 +103,10 @@ print(f"  Surname: {surname_col}")
 print(f"  Role/Specialism: {role_col}")
 print(f"  Country: {country_col}")
 print(f"  Price: {price_col}")
-print(f"  Set No: {set_col}\n")
+print(f"  Set No: {set_col}")
+print(f"  Age: {age_col}")
+print(f"  Hand: {hand_col}")
+print(f"  Bowling: {bowling_col}\n")
 
 for index, row in df.iterrows():
     try:
@@ -131,12 +143,27 @@ for index, row in df.iterrows():
         except:
             set_no = index + 1
         
+        # Parse Age
+        try:
+            age = int(row[age_col]) if age_col and pd.notna(row[age_col]) else None
+        except:
+            age = None
+
+        # Parse Hand
+        hand = str(row[hand_col]).strip() if hand_col and pd.notna(row[hand_col]) else None
+        
+        # Parse Bowling
+        bowling = str(row[bowling_col]).strip() if bowling_col and pd.notna(row[bowling_col]) else None
+
         Player.objects.create(
             name=name,
             role=role,
             country=country,
             base_price=base_price,
-            set_no=set_no
+            set_no=set_no,
+            age=age,
+            hand=hand,
+            bowling=bowling
         )
         count += 1
         

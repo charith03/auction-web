@@ -20,10 +20,10 @@ from rest_framework import routers
 from auction.views import (
     PlayerViewSet, TeamViewSet, AuctionViewSet, 
     create_room, join_room, place_bid, check_qualification, get_room_state,
-    start_auction, pause_auction, sell_player,
+    start_auction, pause_auction, sell_player, get_active_rooms,
     get_chat_messages, send_chat_message, get_my_team,
     skip_player, end_auction, get_summary, get_upcoming_players, update_room_settings,
-    get_unsold_players, submit_team, get_winner
+    get_unsold_players, submit_team, get_winner, get_auction_logs
 )
 
 
@@ -35,6 +35,7 @@ router.register(r'auctions', AuctionViewSet)
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
+    path('api/rooms/', get_active_rooms),
     path('api/create-room/', create_room),
     path('api/join-room/', join_room),
     path("api/start-auction/", start_auction),
@@ -54,6 +55,7 @@ urlpatterns = [
     path("api/update-settings/", update_room_settings),
     path("api/submit-xi/", submit_team),
     path("api/winner/<str:code>/", get_winner),
+    path("api/logs/<str:code>/", get_auction_logs),
 ]
 
 

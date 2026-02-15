@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: auction-backend
+    env: python
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn auction_web.wsgi:application"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: auction-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: WEB_CONCURRENCY
+        value: 4
+
+databases:
+  - name: auction-db
+    databaseName: auction_db
+    user: auction_user
